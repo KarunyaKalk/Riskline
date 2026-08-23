@@ -72,28 +72,46 @@
   - `run_risk_analysis_pipeline`: Combines change title/description with historical RAG context, invokes LLM client, stores `RiskAnalysis` record, indexes change text into `ChangeEmbedding`, updates `Change` status and risk score, and records audit logs (`RISK_ANALYSIS_COMPLETED`).
   - Background async execution via FastAPI `BackgroundTasks`.
   - Endpoints: `POST /api/v1/changes/{id}/analyze` and `GET /api/v1/changes/{id}/risk-analysis`.
-- **AI Pipeline Test Suite (`test_ai_pipeline.py`)**:
-  - Full mock-mode end-to-end test (PDF upload -> text extraction -> sliding-window chunking -> embedding -> RAG search -> risk engine -> persistence).
-  - Cross-tenant RAG isolation test verifying Org B vector search returns 0 results from Org A confidential embeddings.
-  - Sanity check verifying realistic risk scores across 5 deployment scenarios (Schema migration, Auth token rotation, K8s upgrade, Redis restart, CSS typo fix).
+
+---
+
+## Day 4 — Chat, Real-Time Updates & Notifications (Completed)
+
+### 1. What's Built
+- **Streaming Chatbot with Audience Modes (`chat_service.py`, `/api/v1/chat`)**:
+  - Token-by-token streaming responses via Server-Sent Events (SSE) at `POST /api/v1/chat/stream`.
+  - Shared organization chat threads by `session_id` with `user_id` message attribution.
+  - Refined system prompts for `technical`, `business`, and `auto-detect` audience translation modes with few-shot examples.
+  - Contextual grounding using RAG retrieval from `embedding_service`.
+  - `GET /api/v1/chat/history` endpoint to retrieve persistent thread messages.
+- **Real-Time Org Event Broadcasting (`events.py`, `/api/v1/events`)**:
+  - `EventBroadcaster` publisher/subscriber manager in `backend/app/core/events.py`.
+  - SSE endpoint `GET /api/v1/events/stream` broadcasting live changes, notes, and alerts strictly for the requesting tenant (`WHERE org_id == current_user.org_id`).
+  - Integrated live event publishing into `create_change` and `run_risk_analysis_pipeline`.
+- **Notifications & User Delivery Preferences (`notification_service.py`, `/api/v1/notifications`)**:
+  - Models `Notification` and `NotificationPreference` with Alembic migration `004_notifications_schema.py`.
+  - Automatic notification triggering when a deployment change evaluates at `high` or `critical` risk (`risk_score >= 7.0`).
+  - Support for in-app notification alerts, email delivery stubs, and Slack webhook alert stubs.
+  - Endpoints for listing notifications, marking read, and updating user preferences (`inapp_enabled`, `email_enabled`, `slack_enabled`, `min_risk_level`).
 
 ---
 
 ### 2. Key Architectural Decisions
 
-#### Decision: Embedding Model Selection & Fallback Strategy
-- **Choice**: Used OpenAI `text-embedding-3-small` (1536 dimensions) when API keys are configured, and a local deterministic 1536-dimensional Hash-Vectorizer for mock/offline/CI environments.
-- **Rationale**: Avoids per-call embedding API costs and network latency during local development and automated CI testing while preserving identical 1536-dimensional vector geometry and cosine similarity logic across all environments.
+#### Decision: Server-Sent Events (SSE) Protocol for Chat & Live Events
+- **Choice**: Selected SSE (`text/event-stream`) over WebSockets for both token streaming and real-time dashboard broadcasts.
+- **Rationale**: SSE is HTTP-native, simpler, proxy-friendly behind Nginx, handles token streaming out of the box, and features automatic client reconnection.
 
-#### Decision: Async Background Analysis Task Architecture
-- **Choice**: PDF uploads and change risk analyses are processed asynchronously using FastAPI `BackgroundTasks`. The upload endpoint immediately returns `status = "processing"`.
-- **Rationale**: LLM generation and embedding indexing can take several seconds. Returning immediately prevents HTTP request timeouts and provides a smooth client experience where the frontend polls `GET /api/v1/changes/{id}` for completion.
+#### Decision: Shared Org Chat Threads
+- **Choice**: Chat sessions are shared organization-wide with `user_id` message attribution.
+- **Rationale**: Directly reinforces the core product value proposition: cross-team alignment and transparency between technical engineers and business/ops leaders.
 
 ---
 
 ### 3. Test Coverage Summary
 
-Extensive test coverage (23 total Pytest cases passing):
+Extensive test coverage (27 total Pytest cases passing):
+- **Chat & Real-Time Tests (`test_chat_and_realtime.py`)**: SSE token streaming, audience mode translation, tenant/session chat isolation, tenant-isolated SSE event broadcasting, high-risk notification triggering & preference controls.
 - **AI Pipeline Tests (`test_ai_pipeline.py`)**: End-to-end PDF ingestion, invalid PDF rejection, strict cross-tenant RAG vector isolation, realistic deployment scenario assessments.
 - **Roster Tests (`test_roster.py`)**: Full CRUD, Admin-only enforcement, Viewer 403 checks, cross-tenant isolation.
 - **Notes Tests (`test_notes.py`)**: Full CRUD, tag filtering, author filtering, pagination, author/admin deletion checks, cross-tenant isolation.
@@ -105,13 +123,13 @@ Extensive test coverage (23 total Pytest cases passing):
 
 ---
 
-### 4. What's Next (Day 4 Roadmap)
-- **Interactive Stakeholder Chatbot & RAG Assistant**:
-  - Chatbot session management (`ChatMessage` table).
-  - Contextual Q&A retrieving relevant changes, notes, and risk analyses.
-  - Tailored technical responses for engineers vs. plain-language explanations for business stakeholders.
+### 4. What's Next (Day 5 Roadmap)
+- **Frontend Dashboard & Collaborative UI Surface**:
+  - Connect React frontend to backend API endpoints (Changes, Notes, Roster, Progress, Risk Analyses).
+  - Live SSE real-time feed integration & notification bell badge.
+  - Interactive streaming chat drawer with audience mode toggle (`Technical` vs `Business`).
 
 ---
 
 ### 5. Open Questions for User
-- Did the risk assessment scores and summaries for the deployment scenarios (e.g. 8.2 for DB schema drop column, 1.8 for CSS typo fix) align with your expectations?
+- Both Slack webhook and email notification stubs are built and integrated. Would you like to configure a specific Slack Webhook URL or SMTP server setting for Day 5?

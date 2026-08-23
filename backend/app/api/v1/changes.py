@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.events import event_broadcaster
 from app.core.rate_limiter import rate_limit_mutations
 from app.models.audit_log import record_audit_log
 from app.models.change import Change
@@ -60,6 +61,11 @@ def create_change(
     )
     db.commit()
     db.refresh(change)
+
+    # Publish live SSE real-time update event to org members
+    event_broadcaster.publish_sync(
+        current_user.org_id, "CHANGE_CREATED", {"change_id": str(change.id), "title": change.title}
+    )
 
     # Trigger background AI risk analysis pipeline
     background_tasks.add_task(run_risk_analysis_pipeline, db, current_user.org_id, change.id)

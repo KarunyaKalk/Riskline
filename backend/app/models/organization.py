@@ -22,3 +22,4 @@ class Organization(Base):
     chat_messages = relationship("ChatMessage", back_populates="organization", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
     invites = relationship("OrgInvite", back_populates="organization", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="organization", cascade="all, delete-orphan")

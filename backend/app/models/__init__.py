@@ -10,6 +10,7 @@ from app.models.chat_message import ChatMessage
 from app.models.audit_log import AuditLog, record_audit_log
 from app.models.org_invite import OrgInvite
 from app.models.change_embedding import ChangeEmbedding
+from app.models.notification import Notification, NotificationPreference
 
 __all__ = [
     "OrgScopedMixin",
@@ -26,4 +27,6 @@ __all__ = [
     "record_audit_log",
     "OrgInvite",
     "ChangeEmbedding",
+    "Notification",
+    "NotificationPreference",
 ]

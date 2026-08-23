@@ -164,6 +164,66 @@ class RiskAnalysisRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# --- Chat Schemas ---
+class ChatMessageSend(BaseModel):
+    session_id: str = Field("main", description="Chat session ID (default: main)")
+    message: str = Field(..., min_length=1, description="User prompt or question")
+    audience: str = Field("auto-detect", description="Audience translation mode: technical, business, or auto-detect")
+
+
+class ChatMessageRead(BaseModel):
+    id: UUID
+    org_id: UUID
+    user_id: Optional[UUID] = None
+    session_id: str
+    role: str
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChatHistoryResponse(PaginatedResponse):
+    items: List[ChatMessageRead]
+
+
+# --- Notification Schemas ---
+class NotificationRead(BaseModel):
+    id: UUID
+    org_id: UUID
+    user_id: UUID
+    title: str
+    message: str
+    type: str
+    is_read: bool
+    target_url: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationListResponse(PaginatedResponse):
+    items: List[NotificationRead]
+    unread_count: int
+
+
+class NotificationPreferenceRead(BaseModel):
+    user_id: UUID
+    inapp_enabled: bool
+    email_enabled: bool
+    slack_enabled: bool
+    min_risk_level: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    inapp_enabled: Optional[bool] = None
+    email_enabled: Optional[bool] = None
+    slack_enabled: Optional[bool] = None
+    min_risk_level: Optional[str] = None
+
+
 # --- Org Invite & Member Management Schemas ---
 class InviteCreate(BaseModel):
     email: EmailStr = Field(..., description="Recipient email address")

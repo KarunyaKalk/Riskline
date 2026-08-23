@@ -3,12 +3,14 @@ from typing import Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.core.events import event_broadcaster
 from app.models.audit_log import record_audit_log
 from app.models.change import Change
 from app.models.risk_analysis import RiskAnalysis
 from app.schemas.domain import RiskAnalysisRead
 from app.services.embedding_service import index_change_text, search_similar_chunks
 from app.services.llm_client import llm_client
+from app.services.notification_service import trigger_high_risk_notifications
 
 logger = logging.getLogger("risk_engine")
 
@@ -34,15 +36,11 @@ def format_risk_analysis_response(risk_record: RiskAnalysis, change: Change) -> 
 
 
 def run_risk_analysis_pipeline(db: Session, org_id: UUID, change_id: UUID) -> Optional[RiskAnalysisRead]:
-    """
-    Executes end-to-end AI risk analysis pipeline for a deployment change:
-    1. Retrieves change record & historical RAG context (org-scoped).
-    2. Invokes LLM client for structured risk assessment.
-    3. Persists RiskAnalysis record.
-    4. Indexes change text into ChangeEmbedding table for future RAG retrieval.
-    5. Updates Change risk_score and status.
-    6. Records audit log entry.
-    """
+    if isinstance(org_id, str):
+        org_id = UUID(org_id)
+    if isinstance(change_id, str):
+        change_id = UUID(change_id)
+
     change = db.query(Change).filter(Change.id == change_id, Change.org_id == org_id).first()
     if not change:
         logger.error(f"Change {change_id} not found for org {org_id}")
@@ -114,4 +112,26 @@ def run_risk_analysis_pipeline(db: Session, org_id: UUID, change_id: UUID) -> Op
     db.commit()
     db.refresh(risk_record)
     db.refresh(change)
+
+    # 7. Trigger Live Event Broadcast & High Risk Notifications
+    event_broadcaster.publish_sync(
+        org_id=org_id,
+        event_type="RISK_ANALYSIS_COMPLETED",
+        payload={
+            "change_id": str(change_id),
+            "title": change.title,
+            "risk_level": analysis_output.risk_level,
+            "risk_score": analysis_output.risk_score,
+        },
+    )
+
+    trigger_high_risk_notifications(
+        db=db,
+        org_id=org_id,
+        change_id=change_id,
+        change_title=change.title,
+        risk_level=analysis_output.risk_level,
+        risk_score=analysis_output.risk_score,
+    )
+
     return format_risk_analysis_response(risk_record, change)
