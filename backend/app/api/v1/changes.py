@@ -1,21 +1,25 @@
 from typing import Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit_mutations
 from app.models.audit_log import record_audit_log
 from app.models.change import Change
+from app.models.risk_analysis import RiskAnalysis
 from app.models.user import User, UserRole
 from app.schemas.domain import (
     ChangeCreate,
     ChangeListResponse,
     ChangeRead,
     ChangeUpdate,
+    RiskAnalysisRead,
 )
+from app.services.pdf_service import extract_text_from_pdf
+from app.services.risk_engine import format_risk_analysis_response, run_risk_analysis_pipeline
 
-router = APIRouter(prefix="/changes", tags=["Changes"])
+router = APIRouter(prefix="/changes", tags=["Changes & AI Risk Analysis"])
 
 
 @router.post(
@@ -28,6 +32,7 @@ router = APIRouter(prefix="/changes", tags=["Changes"])
 )
 def create_change(
     payload: ChangeCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -35,7 +40,7 @@ def create_change(
         org_id=current_user.org_id,
         title=payload.title,
         description=payload.description,
-        status=payload.status,
+        status=payload.status or "pending",
         author_id=current_user.id,
         deployment_date=payload.deployment_date,
         risk_score=payload.risk_score,
@@ -55,7 +60,119 @@ def create_change(
     )
     db.commit()
     db.refresh(change)
+
+    # Trigger background AI risk analysis pipeline
+    background_tasks.add_task(run_risk_analysis_pipeline, db, current_user.org_id, change.id)
+
     return change
+
+
+@router.post(
+    "/upload-pdf",
+    response_model=ChangeRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_mutations)],
+    summary="Upload PDF Change Document",
+    description="Uploads a PDF change spec/document, extracts text, creates a Change record, and triggers async risk analysis.",
+)
+def upload_pdf_change(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_bytes = file.file.read()
+    extracted_text = extract_text_from_pdf(file_bytes, file.filename or "change_document.pdf")
+    doc_title = title or file.filename or "Uploaded Deployment PDF Specification"
+
+    change = Change(
+        org_id=current_user.org_id,
+        title=doc_title,
+        description=extracted_text,
+        status="processing",
+        author_id=current_user.id,
+        metadata_json={"source": "pdf_upload", "filename": file.filename},
+    )
+    db.add(change)
+    db.flush()
+
+    record_audit_log(
+        db=db,
+        org_id=current_user.org_id,
+        actor_user_id=current_user.id,
+        action="PDF_CHANGE_UPLOADED",
+        target_type="change",
+        target_id=str(change.id),
+        metadata_json={"filename": file.filename, "extracted_length": len(extracted_text)},
+    )
+    db.commit()
+    db.refresh(change)
+
+    # Trigger background AI risk analysis pipeline
+    background_tasks.add_task(run_risk_analysis_pipeline, db, current_user.org_id, change.id)
+
+    return change
+
+
+@router.post(
+    "/{change_id}/analyze",
+    response_model=RiskAnalysisRead,
+    dependencies=[Depends(rate_limit_mutations)],
+    summary="Trigger Risk Analysis",
+    description="Synchronously or background triggers risk analysis for a change record.",
+)
+def trigger_change_analysis(
+    change_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    change = (
+        db.query(Change)
+        .filter(Change.id == change_id, Change.org_id == current_user.org_id)
+        .first()
+    )
+    if not change:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Change not found")
+
+    analysis = run_risk_analysis_pipeline(db, current_user.org_id, change_id)
+    if not analysis:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to run risk analysis")
+
+    return analysis
+
+
+@router.get(
+    "/{change_id}/risk-analysis",
+    response_model=RiskAnalysisRead,
+    summary="Get Risk Analysis Output",
+    description="Retrieves the completed AI risk assessment output for a specific change record.",
+)
+def get_change_risk_analysis(
+    change_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    change = (
+        db.query(Change)
+        .filter(Change.id == change_id, Change.org_id == current_user.org_id)
+        .first()
+    )
+    if not change:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Change not found")
+
+    analysis = (
+        db.query(RiskAnalysis)
+        .filter(RiskAnalysis.change_id == change_id, RiskAnalysis.org_id == current_user.org_id)
+        .first()
+    )
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Risk analysis has not been generated for this change yet",
+        )
+
+    return format_risk_analysis_response(analysis, change)
 
 
 @router.get(
@@ -65,7 +182,7 @@ def create_change(
     description="Lists deployment change records with optional status filter, author filter, and pagination.",
 )
 def list_changes(
-    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (pending, approved, deployed, rolled_back)"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (pending, processing, analyzed, deployed, rolled_back)"),
     author_id: Optional[UUID] = Query(None, description="Filter by author user ID"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),

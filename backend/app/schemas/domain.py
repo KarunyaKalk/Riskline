@@ -148,6 +148,22 @@ class ChangeListResponse(PaginatedResponse):
     items: List[ChangeRead]
 
 
+# --- Risk Analysis Schemas ---
+class RiskAnalysisRead(BaseModel):
+    id: UUID
+    org_id: UUID
+    change_id: UUID
+    technical_summary: str
+    business_summary: str
+    risk_level: str
+    risk_score: Optional[float] = None
+    recommendations: List[str] = Field(default_factory=list)
+    is_degraded: bool = False
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # --- Org Invite & Member Management Schemas ---
 class InviteCreate(BaseModel):
     email: EmailStr = Field(..., description="Recipient email address")

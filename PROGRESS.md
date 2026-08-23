@@ -50,22 +50,52 @@
 
 ---
 
+## Day 3 — AI Core & Risk Analysis Pipeline (Completed)
+
+### 1. What's Built
+- **LLM Client Abstraction (`llm_client.py`)**:
+  - Provider-agnostic interface supporting OpenAI (`gpt-4o-mini`), Gemini (`gemini-1.5-flash`), and a zero-cost Mock heuristic fallback engine.
+  - Structured output validation using Pydantic `RiskAnalysisOutput` (`risk_level`, `risk_score`, `technical_summary`, `business_summary`, `recommendations`, `is_degraded`).
+  - Automatic retry with exponential backoff (2 attempts) and timeout enforcement (15s).
+  - Graceful degradation: Never fails user requests on API errors; falls back to mock heuristic engine with `is_degraded = True`.
+- **Embeddings & `pgvector` RAG Pipeline (`embedding_service.py`)**:
+  - Added `ChangeEmbedding` model and Alembic migration `003_pgvector_change_embeddings.py`.
+  - Document chunking strategy (800-character sliding window with 150-character overlap).
+  - Embedding generation: OpenAI `text-embedding-3-small` (1536 dims) when OpenAI API key is present; deterministic 1536-dimensional Hash-Vectorizer fallback for mock/offline/CI environments.
+  - Semantic vector search (`search_similar_chunks`) strictly scoped to the requesting organization (`WHERE org_id == current_user.org_id`), guaranteeing zero cross-tenant vector data leakage.
+- **PDF Ingestion Parser (`pdf_service.py`)**:
+  - File size validation (10MB limit) and PDF magic header check (`%PDF`).
+  - Text extraction using `pypdf.PdfReader`.
+  - Clear error handling for non-PDFs or documents containing no extractable text.
+  - `POST /api/v1/changes/upload-pdf` endpoint for uploading PDF change specifications.
+- **Risk Analysis Engine (`risk_engine.py`)**:
+  - `run_risk_analysis_pipeline`: Combines change title/description with historical RAG context, invokes LLM client, stores `RiskAnalysis` record, indexes change text into `ChangeEmbedding`, updates `Change` status and risk score, and records audit logs (`RISK_ANALYSIS_COMPLETED`).
+  - Background async execution via FastAPI `BackgroundTasks`.
+  - Endpoints: `POST /api/v1/changes/{id}/analyze` and `GET /api/v1/changes/{id}/risk-analysis`.
+- **AI Pipeline Test Suite (`test_ai_pipeline.py`)**:
+  - Full mock-mode end-to-end test (PDF upload -> text extraction -> sliding-window chunking -> embedding -> RAG search -> risk engine -> persistence).
+  - Cross-tenant RAG isolation test verifying Org B vector search returns 0 results from Org A confidential embeddings.
+  - Sanity check verifying realistic risk scores across 5 deployment scenarios (Schema migration, Auth token rotation, K8s upgrade, Redis restart, CSS typo fix).
+
+---
+
 ### 2. Key Architectural Decisions
 
-#### Decision: Teammate Invite Flow
-- **Choice**: Implemented `OrgInvite` model with secure 48-hour random tokens. When an admin invites a user, a token is issued and logged to console (`[INVITE STUB]`). Acceptance validates token status and expiration before provisioning the user under the inviter's `org_id`.
-- **Rationale**: Keeps signup secure, tenant-isolated, and audit-logged, allowing smooth onboarding without relying on an external mail service during local development.
+#### Decision: Embedding Model Selection & Fallback Strategy
+- **Choice**: Used OpenAI `text-embedding-3-small` (1536 dimensions) when API keys are configured, and a local deterministic 1536-dimensional Hash-Vectorizer for mock/offline/CI environments.
+- **Rationale**: Avoids per-call embedding API costs and network latency during local development and automated CI testing while preserving identical 1536-dimensional vector geometry and cosine similarity logic across all environments.
 
-#### Decision: Author & Role-Based Deletion Permissions
-- **Choice**: Notes and changes can be edited or deleted by their author or an Organization Admin. Viewer role users are restricted to read-only access across all write surfaces.
-- **Rationale**: Balances collaborative flexibility with security governance.
+#### Decision: Async Background Analysis Task Architecture
+- **Choice**: PDF uploads and change risk analyses are processed asynchronously using FastAPI `BackgroundTasks`. The upload endpoint immediately returns `status = "processing"`.
+- **Rationale**: LLM generation and embedding indexing can take several seconds. Returning immediately prevents HTTP request timeouts and provides a smooth client experience where the frontend polls `GET /api/v1/changes/{id}` for completion.
 
 ---
 
 ### 3. Test Coverage Summary
 
-Extensive test coverage (19 total Pytest cases passing):
-- **Roster Tests (`test_roster.py`)**: Full CRUD, Admin-only enforcement, Viewer 403 forbidden checks, cross-tenant isolation.
+Extensive test coverage (23 total Pytest cases passing):
+- **AI Pipeline Tests (`test_ai_pipeline.py`)**: End-to-end PDF ingestion, invalid PDF rejection, strict cross-tenant RAG vector isolation, realistic deployment scenario assessments.
+- **Roster Tests (`test_roster.py`)**: Full CRUD, Admin-only enforcement, Viewer 403 checks, cross-tenant isolation.
 - **Notes Tests (`test_notes.py`)**: Full CRUD, tag filtering, author filtering, pagination, author/admin deletion checks, cross-tenant isolation.
 - **Progress Tests (`test_progress.py`)**: Full CRUD, Admin/Engineer edit permissions, Viewer read-only checks, cross-tenant isolation.
 - **Changes Tests (`test_changes.py`)**: Full CRUD, `author_id` linking to `current_user.id`, status filtering, pagination, cross-tenant isolation.
@@ -75,13 +105,13 @@ Extensive test coverage (19 total Pytest cases passing):
 
 ---
 
-### 4. What's Next (Day 3 Roadmap)
-- **AI Core & Risk Assessment Engine**:
-  - LLM client abstraction (OpenAI / Gemini / Mock mode fallback).
-  - Ingestion pipeline for deployment logs, PR text, and PDF document parser (`pypdf` / text extraction).
-  - Automated risk analysis generation (technical summary, business summary, risk score, recommendations).
+### 4. What's Next (Day 4 Roadmap)
+- **Interactive Stakeholder Chatbot & RAG Assistant**:
+  - Chatbot session management (`ChatMessage` table).
+  - Contextual Q&A retrieving relevant changes, notes, and risk analyses.
+  - Tailored technical responses for engineers vs. plain-language explanations for business stakeholders.
 
 ---
 
-### 5. Open Questions
-- None. Day 2 core domain backend is fully completed, tested, and ready for Day 3 AI integration.
+### 5. Open Questions for User
+- Did the risk assessment scores and summaries for the deployment scenarios (e.g. 8.2 for DB schema drop column, 1.8 for CSS typo fix) align with your expectations?

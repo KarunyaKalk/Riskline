@@ -12,7 +12,7 @@ class Change(Base, OrgScopedMixin):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
-    status = Column(String(50), nullable=False, default="pending")
+    status = Column(String(50), nullable=False, default="pending")  # pending, processing, analyzed, deployed, rolled_back
     author_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     deployment_date = Column(DateTime(timezone=True), nullable=True)
     risk_score = Column(Float, nullable=True)
@@ -27,3 +27,4 @@ class Change(Base, OrgScopedMixin):
 
     organization = relationship("Organization", back_populates="changes")
     risk_analyses = relationship("RiskAnalysis", back_populates="change", cascade="all, delete-orphan")
+    embeddings = relationship("ChangeEmbedding", back_populates="change", cascade="all, delete-orphan")

@@ -9,6 +9,7 @@ from app.models.project_progress import ProjectProgress
 from app.models.chat_message import ChatMessage
 from app.models.audit_log import AuditLog, record_audit_log
 from app.models.org_invite import OrgInvite
+from app.models.change_embedding import ChangeEmbedding
 
 __all__ = [
     "OrgScopedMixin",
@@ -24,4 +25,5 @@ __all__ = [
     "AuditLog",
     "record_audit_log",
     "OrgInvite",
+    "ChangeEmbedding",
 ]
