@@ -30,27 +30,58 @@
 
 ---
 
+## Day 2 — Core Domain Backend (Completed)
+
+### 1. What's Built
+- **Team Roster Endpoints (`/api/v1/team-members`)**: Full org-scoped CRUD for managing team members. Restricted to Admin role for create, update, and delete operations. Readable by all org members.
+- **Notes & Brainstorm Board (`/api/v1/notes`)**: Full org-scoped CRUD with support for tags (`idea`, `blocker`, `decision`, `question`), tag filtering (`?tag=blocker`), author filtering (`?author_id=...`), and pagination (`skip`, `limit`). Protected so only the note author or Organization Admin can modify or delete a note.
+- **Project Progress Tracker (`/api/v1/project-progress`)**: Full org-scoped CRUD allowing Admin/Engineer roles to update project milestones and progress percentages, while all org users can view status.
+- **Change Management (`/api/v1/changes`)**: Full org-scoped CRUD for deployment and architectural changes. Sets `author_id` strictly to the authenticated `current_user.id` for auditability. Includes status filtering (`?status=deployed`), author filtering, and pagination.
+- **Org Management & Teammate Invites (`/api/v1/orgs`)**:
+  - Introduced `OrgInvite` model (`org_id`, `email`, `role`, `token`, `status`, `expires_at`).
+  - `POST /api/v1/orgs/invites`: Generates a 48-hour secure invite token (Admin only).
+  - `GET /api/v1/orgs/invites/{token}`: Inspects invite details.
+  - `POST /api/v1/orgs/invites/accept`: Accepts invite and registers user under the inviting organization.
+  - `PUT /api/v1/orgs/members/{user_id}/role`: Modifies member roles with sole-admin demotion protection.
+  - `DELETE /api/v1/orgs/members/{user_id}`: Removes members from org with self-removal protection.
+- **Audit Log Integration**: Integrated `record_audit_log` into every single mutation endpoint across the system (`TEAM_MEMBER_CREATED`, `NOTE_DELETED`, `PROJECT_PROGRESS_UPDATED`, `CHANGE_CREATED`, `USER_INVITED`, `INVITE_ACCEPTED`, `MEMBER_ROLE_UPDATED`, `MEMBER_REMOVED`). Exposed `GET /api/v1/audit-logs` endpoint with pagination and action filtering.
+- **Redis-Backed Rate Limiting**: Added `RateLimiter` dependency enforcing per-user limits (60 mutating requests/min) using Redis with an in-memory sliding window fallback for test environments.
+- **OpenAPI Documentation**: Enriched FastAPI auto-generated OpenAPI documentation with response models, status codes, query descriptions, and schema examples.
+
+---
+
 ### 2. Key Architectural Decisions
 
-#### Decision: TeamMember vs User Model
-- **Choice**: Implemented `TeamMember` as a separate, lightweight roster table scoped by `org_id` with an optional `user_id` foreign key (`nullable=True`).
-- **Rationale**: In real-world engineering teams, admins and leads need to map out team rosters and assign deployment changes or risk reviews to individuals before those team members have registered a platform account. Having `TeamMember` as a roster entity allows unboarded team members to exist on changes/notes; when a user completes registration, their `user_id` is linked to their `TeamMember` profile.
+#### Decision: Teammate Invite Flow
+- **Choice**: Implemented `OrgInvite` model with secure 48-hour random tokens. When an admin invites a user, a token is issued and logged to console (`[INVITE STUB]`). Acceptance validates token status and expiration before provisioning the user under the inviter's `org_id`.
+- **Rationale**: Keeps signup secure, tenant-isolated, and audit-logged, allowing smooth onboarding without relying on an external mail service during local development.
 
-#### Decision: Audit Log Strategy From Day One
-- **Choice**: Built `AuditLog` table and `record_audit_log` helper into the backend core on Day 1.
-- **Rationale**: Multi-tenant platforms operating in enterprise/DevOps environments require strict auditability. Recording security mutations (`USER_SIGNUP`, `USER_LOGIN`) from the outset prevents security gaps and avoids complex retrofitting.
-
-#### Decision: Multi-Tenant Data Isolation Pattern
-- **Choice**: Enforced `OrgScopedMixin` on every domain model (except `Organization`).
-- **Rationale**: Every table containing org-specific data guarantees an `org_id` column with an index and foreign key cascade. API route dependencies extract `org_id` directly from verified JWT claims.
+#### Decision: Author & Role-Based Deletion Permissions
+- **Choice**: Notes and changes can be edited or deleted by their author or an Organization Admin. Viewer role users are restricted to read-only access across all write surfaces.
+- **Rationale**: Balances collaborative flexibility with security governance.
 
 ---
 
-### 3. What's Next (Day 2 Roadmap)
-- **Change Data Ingestion Pipeline**: Endpoints and parsers for deployment logs, PR summaries, and document/PDF uploads.
-- **Mock LLM & Risk Assessment Engine**: Pipeline for generating technical risk scores and plain-language stakeholder summaries.
+### 3. Test Coverage Summary
+
+Extensive test coverage (19 total Pytest cases passing):
+- **Roster Tests (`test_roster.py`)**: Full CRUD, Admin-only enforcement, Viewer 403 forbidden checks, cross-tenant isolation.
+- **Notes Tests (`test_notes.py`)**: Full CRUD, tag filtering, author filtering, pagination, author/admin deletion checks, cross-tenant isolation.
+- **Progress Tests (`test_progress.py`)**: Full CRUD, Admin/Engineer edit permissions, Viewer read-only checks, cross-tenant isolation.
+- **Changes Tests (`test_changes.py`)**: Full CRUD, `author_id` linking to `current_user.id`, status filtering, pagination, cross-tenant isolation.
+- **Org & Invite Tests (`test_orgs.py`)**: Invite token generation & acceptance, member role updates, sole-admin protection, member removal, cross-tenant isolation.
+- **Rate Limiter Tests (`test_rate_limiter.py`)**: Rate limiting count enforcement & 429 response.
+- **Auth Tests (`test_auth.py`)**: Signup, login, 401 unauthenticated rejection, 403 RBAC checks, cross-tenant isolation.
 
 ---
 
-### 4. Open Questions
-- None. Day 1 foundation is fully functional and ready for Day 2 ingestion features.
+### 4. What's Next (Day 3 Roadmap)
+- **AI Core & Risk Assessment Engine**:
+  - LLM client abstraction (OpenAI / Gemini / Mock mode fallback).
+  - Ingestion pipeline for deployment logs, PR text, and PDF document parser (`pypdf` / text extraction).
+  - Automated risk analysis generation (technical summary, business summary, risk score, recommendations).
+
+---
+
+### 5. Open Questions
+- None. Day 2 core domain backend is fully completed, tested, and ready for Day 3 AI integration.

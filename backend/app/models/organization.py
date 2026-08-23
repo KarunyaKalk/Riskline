@@ -21,3 +21,4 @@ class Organization(Base):
     project_progresses = relationship("ProjectProgress", back_populates="organization", cascade="all, delete-orphan")
     chat_messages = relationship("ChatMessage", back_populates="organization", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
+    invites = relationship("OrgInvite", back_populates="organization", cascade="all, delete-orphan")
