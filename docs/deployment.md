@@ -1,48 +1,78 @@
-# Hosting Guide: GitHub Pages Frontend + Render Backend
+# Self-Hosting & Production Deployment Guide
 
-This guide details hosting the **Riskline** React frontend on **GitHub Pages** and the FastAPI backend + PostgreSQL + Redis stack on **Render**.
-
----
-
-## 1. Render Backend Blueprint Setup (Automatic)
-
-The codebase includes a native Render Blueprint specification file: [`render.yaml`](../render.yaml).
-
-### Steps to Deploy Backend on Render:
-1. Log in to [Render Dashboard](https://dashboard.render.com).
-2. Click **New +** -> **Blueprint**.
-3. Connect your GitHub repository `KarunyaKalk/Riskline`.
-4. Render will automatically detect `render.yaml` and provision:
-   - **`riskline-backend`**: Python FastAPI Web Service.
-   - **`riskline-db`**: PostgreSQL Instance (with `pgvector` extension enabled).
-   - **`riskline-redis`**: Managed Redis Instance.
-5. Once deployed, copy your backend live URL: `https://riskline-backend.onrender.com`.
+This guide walks through deploying **Riskline** to production using multi-stage Docker containers, managed PostgreSQL (pgvector), Redis, and automated database backup routines.
 
 ---
 
-## 2. GitHub Pages Frontend Deployment (Automated CI/CD)
+## 1. Target Hosting Platform Recommendation
 
-The repository includes a automated GitHub Actions workflow: [`.github/workflows/deploy-gh-pages.yml`](../.github/workflows/deploy-gh-pages.yml).
+For small to mid-sized engineering teams, we recommend **Render** or **Railway**:
+- **Render**: Supports managed PostgreSQL with `pgvector` extension out-of-the-box, managed Redis instance, automatic TLS certificates, and native multi-service deployment from GitHub.
+- **Railway**: Alternative lightweight developer platform with one-click Postgres+Redis provisioning.
 
-### Steps to Deploy Frontend to GitHub Pages:
-1. Go to your GitHub Repository Settings (`https://github.com/KarunyaKalk/Riskline/settings/pages`).
-2. Under **Build and deployment** -> **Source**, select **`gh-pages`** branch (or **GitHub Actions**).
-3. Every push to the `main` branch automatically builds the production React application and publishes it to:
-   **`https://karunyakalk.github.io/Riskline/`**
+---
 
-### Custom API Base URL:
-If your Render backend URL differs from `https://riskline-backend.onrender.com`, update `VITE_API_BASE_URL` in `.github/workflows/deploy-gh-pages.yml`:
-```yaml
-env:
-  VITE_API_BASE_URL: https://YOUR-RENDER-APP.onrender.com/api/v1
+## 2. Environment Variables Configuration
+
+Set the following environment variables in your hosting provider's secret manager:
+
+```ini
+# Core Configuration
+ENVIRONMENT=production
+DEBUG=false
+PROJECT_NAME="Riskline Mission Control"
+
+# Database & Redis
+DATABASE_URL=postgresql://user:password@pg-host:5432/riskline_db
+REDIS_URL=redis://redis-host:6379/0
+
+# Security Secrets (Generate using openssl rand -hex 32)
+JWT_SECRET_KEY=e83a4f...
+JWT_REFRESH_SECRET_KEY=7c12b9...
+
+# Allowed CORS Origins (No wildcard *)
+CORS_ORIGINS="https://riskline.yourcompany.com,http://localhost:5173"
+
+# AI Provider Credentials (Optional; defaults to Mock engine if blank)
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-proj-...
+GEMINI_API_KEY=
+
+# Error Tracking (Optional)
+SENTRY_DSN=https://...
 ```
 
 ---
 
-## 3. CORS Configuration
-The backend automatically permits CORS credentials from GitHub Pages. In `render.yaml`:
-```yaml
-envVars:
-  - key: CORS_ORIGINS
-    value: https://karunyakalk.github.io,http://localhost:5173
+## 3. Production Deployment via Docker Compose
+
+```bash
+# 1. Clone repository on production host
+git clone https://github.com/KarunyaKalk/Riskline.git
+cd Riskline
+
+# 2. Configure production .env
+cp backend/.env.example .env
+
+# 3. Build & launch production stack in detached mode
+docker compose -f docker-compose.prod.yml up --build -d
+
+# 4. Execute database Alembic migrations
+docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
 ```
+
+---
+
+## 4. Database Backup Strategy
+
+Run automated daily backups using the provided backup script:
+
+```bash
+# Test backup script manually
+./infra/scripts/backup_db.sh
+
+# Configure daily crontab (e.g. at 02:00 AM)
+0 2 * * * /bin/bash /path/to/Riskline/infra/scripts/backup_db.sh >> /var/log/riskline_backup.log 2>&1
+```
+
+The script compresses database dumps (`.sql.gz`) and automatically retains the last 14 days of backups.
