@@ -1,6 +1,21 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
+export const validatePassword = (password: string): string | null => {
+  if (password.length < 8) return 'Password must be at least 8 characters long.';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least 1 uppercase letter (A-Z).';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least 1 lowercase letter (a-z).';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least 1 number (0-9).';
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return 'Password must contain at least 1 special character (!@#$%^&*).';
+  return null;
+};
+
+export const validateEmail = (email: string): string | null => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return 'Please enter a valid email address.';
+  return null;
+};
+
 export const LoginPage: React.FC<{ onSwitchToSignup: () => void }> = ({ onSwitchToSignup }) => {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -11,6 +26,13 @@ export const LoginPage: React.FC<{ onSwitchToSignup: () => void }> = ({ onSwitch
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const emailErr = validateEmail(email);
+    if (emailErr) {
+      setError(emailErr);
+      return;
+    }
+
     setLoading(true);
     try {
       await login(email, password);
@@ -22,7 +44,7 @@ export const LoginPage: React.FC<{ onSwitchToSignup: () => void }> = ({ onSwitch
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 font-sans">
       <div className="w-full max-w-md glass-card p-8 space-y-6">
         <div className="text-center">
           <div className="inline-block p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 mb-3">
@@ -33,7 +55,7 @@ export const LoginPage: React.FC<{ onSwitchToSignup: () => void }> = ({ onSwitch
         </div>
 
         {error && (
-          <div className="p-3 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs text-center">
+          <div className="p-3 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs text-center leading-relaxed">
             {error}
           </div>
         )}
@@ -96,6 +118,19 @@ export const SignupPage: React.FC<{ onSwitchToLogin: () => void }> = ({ onSwitch
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const emailErr = validateEmail(email);
+    if (emailErr) {
+      setError(emailErr);
+      return;
+    }
+
+    const passErr = validatePassword(password);
+    if (passErr) {
+      setError(passErr);
+      return;
+    }
+
     setLoading(true);
     try {
       await signup(orgName, email, password);
@@ -107,7 +142,7 @@ export const SignupPage: React.FC<{ onSwitchToLogin: () => void }> = ({ onSwitch
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 font-sans">
       <div className="w-full max-w-md glass-card p-8 space-y-6">
         <div className="text-center">
           <h2 className="text-xl font-bold text-slate-100">Create New Organization</h2>
@@ -115,7 +150,7 @@ export const SignupPage: React.FC<{ onSwitchToLogin: () => void }> = ({ onSwitch
         </div>
 
         {error && (
-          <div className="p-3 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs text-center">
+          <div className="p-3 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs text-center leading-relaxed">
             {error}
           </div>
         )}
@@ -146,15 +181,20 @@ export const SignupPage: React.FC<{ onSwitchToLogin: () => void }> = ({ onSwitch
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Password</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-medium text-slate-300">Password</label>
+            </div>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min 8 chars"
+              placeholder="••••••••"
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus-visible:ring-2 focus-visible:ring-cyan-500"
             />
+            <p className="text-[10px] text-slate-500 mt-1 font-mono">
+              Restraints: Min 8 chars, 1 uppercase (A-Z), 1 number (0-9), 1 special (!@#$%^&*)
+            </p>
           </div>
 
           <button
