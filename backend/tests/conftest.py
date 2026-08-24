@@ -1,13 +1,16 @@
 import os
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+os.environ["TESTING"] = "1"
 
 from app.main import app
 from app.core.database import Base
 from app.api.deps import get_db
+from app.core.rate_limiter import _in_memory_store
 
 # Use in-memory SQLite for fast test suite execution if no test DB URL is specified
 TEST_SQLALCHEMY_DATABASE_URL = os.getenv(
@@ -21,6 +24,13 @@ engine = create_engine(
 )
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def clear_rate_limiter():
+    _in_memory_store.clear()
+    yield
+    _in_memory_store.clear()
 
 
 @pytest.fixture(scope="function")

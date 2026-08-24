@@ -11,6 +11,8 @@ from app.models.audit_log import AuditLog, record_audit_log
 from app.models.org_invite import OrgInvite
 from app.models.change_embedding import ChangeEmbedding
 from app.models.notification import Notification, NotificationPreference
+from app.models.api_key import ApiKey
+from app.models.password_reset import PasswordResetToken
 
 __all__ = [
     "OrgScopedMixin",
@@ -29,4 +31,6 @@ __all__ = [
     "ChangeEmbedding",
     "Notification",
     "NotificationPreference",
+    "ApiKey",
+    "PasswordResetToken",
 ]

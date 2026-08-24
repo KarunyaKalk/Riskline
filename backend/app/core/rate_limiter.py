@@ -37,7 +37,9 @@ class RateLimiter:
         user_id_str = str(current_user.id)
         endpoint = request.url.path
         rate_key = f"rate_limit:{user_id_str}:{endpoint}"
+        self._check_limit(rate_key)
 
+    def _check_limit(self, rate_key: str) -> None:
         # 1. Attempt Redis rate limiting
         if self.redis_client:
             try:
@@ -53,13 +55,11 @@ class RateLimiter:
             except HTTPException:
                 raise
             except Exception:
-                # Fall through to in-memory store if Redis operation fails
                 pass
 
         # 2. In-memory sliding window fallback
         now = time.time()
         timestamps = _in_memory_store[rate_key]
-        # Remove timestamps outside the sliding window
         valid_timestamps = [t for t in timestamps if now - t < self.seconds]
         _in_memory_store[rate_key] = valid_timestamps
 
@@ -72,5 +72,18 @@ class RateLimiter:
         _in_memory_store[rate_key].append(now)
 
 
-# Standard default rate limiter for mutating endpoints (60 mutations per minute per user)
+class AuthRateLimiter(RateLimiter):
+    """
+    IP-based rate limiter for unauthenticated auth endpoints (signup/login/password-reset).
+    """
+
+    def __call__(self, request: Request) -> None:
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        endpoint = request.url.path
+        rate_key = f"rate_limit_auth:{client_ip}:{endpoint}"
+        self._check_limit(rate_key)
+
+
+# Standard default rate limiters
 rate_limit_mutations = RateLimiter(times=60, seconds=60)
+rate_limit_auth = AuthRateLimiter(times=5, seconds=60)

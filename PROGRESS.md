@@ -117,33 +117,42 @@
 
 ---
 
-### 2. Key Architectural Decisions
+## Day 6 — Integrations, Security Hardening & Performance (Completed)
 
-#### Decision: Mission Control Aesthetic & Color Palette
-- **Choice**: Designed a sleek, high-contrast dark theme using Deep Slate (`#0B0F19`), Obsidian (`#111827`), Neon Cyan (`#06B6D4`), and Violet (`#8B5CF6`).
-- **Rationale**: Elevates the platform from a generic dashboard to a purpose-built "mission control" for engineering and business leaders, with distinct color tokens for risk levels.
+### 1. What's Built & Verified
 
-#### Decision: Optimistic UI Updates & Error Rollbacks
-- **Choice**: Implemented optimistic state updates for note creation and deletions on the brainstorm board.
-- **Rationale**: Gives users instantaneous UI response while cleanly rolling back local state if the backend mutation rejects.
+#### Power BI Export Integration
+- **API Key Management (`export.py`, `api_key.py`)**: Admin-restricted endpoint `POST /api/v1/export/api-keys` issuing 32-character secret keys (`rk_live_...`), stored as SHA-256 hashes in database table `api_keys` with Alembic migration `005_powerbi_and_password_resets.py`.
+- **Power BI JSON Export Endpoint (`GET /api/v1/export/power-bi`)**: Read-only endpoint authenticated via `X-API-Key` header or `?api_key=...` query parameter. Returns tabular change history, risk scores, summaries, and milestone progress filtered strictly by the key owner's `org_id`.
+- **Documentation (`docs/power-bi-setup.md`)**: Step-by-step connection guide for Power BI Desktop Web Data Source with custom header authentication and scheduled refresh.
+
+#### Security Pass & Audit Checklist
+| Security Item | Status | Verification & Implementation Notes |
+| :--- | :---: | :--- |
+| **Tenant Isolation Audit** | PASSED | Re-audited all query paths (`Change`, `Note`, `TeamMember`, `ProjectProgress`, `ChatMessage`, `AuditLog`, `Notification`, `ApiKey`). Confirmed `WHERE org_id == current_user.org_id` on all endpoints. |
+| **XSS & Input Sanitization** | PASSED | Pydantic strict string validation on inputs; React JSX auto-escaping prevents script injection on all UI rendered text. |
+| **File Upload Hardening** | PASSED | Server-side 10MB limit enforcement, `%PDF` magic header byte inspection, and graceful exception handling for malformed/corrupted PDFs (`test_malformed_pdf_upload_rejection`). |
+| **CORS Configuration** | PASSED | Explicit `CORSMiddleware` configured via `settings.cors_origin_list` (`http://localhost:5173`, `http://127.0.0.1:5173`). Wildcard `*` disabled. |
+| **Secrets Hygiene** | PASSED | Secrets loaded exclusively via pydantic-settings `.env`; password hashes use Argon2id; API keys stored as SHA-256 hashes; secrets never logged or returned in responses. |
+| **Password Reset Flow** | PASSED | `POST /auth/forgot-password` and `POST /auth/reset-password` with 1-hour expiration and single-use invalidation (`PasswordResetToken`). |
+| **Auth Rate Limiting** | PASSED | `AuthRateLimiter` enforces 5 attempts/min on `/login`, `/signup`, and password reset endpoints. |
+| **Vulnerability Audit** | PASSED | `npm audit fix` executed. Resolved dependency vulnerabilities. |
+
+#### Performance & Load Benchmarks
+- **Load Test Script (`backend/scripts/benchmark_load.py`)**:
+  - `/health`: **800.4 req/s** (50 requests in 0.062s)
+  - `GET /api/v1/changes`: **291.2 req/s** (50 requests in 0.172s)
+  - `POST /api/v1/changes`: **81.0 req/s** (10 mutation requests in 0.124s including async AI pipeline execution and high-risk notification dispatch)
+- **Database Indexes**: Indexed foreign keys and search columns (`org_id`, `user_id`, `created_at`, `status`, `key_hash`, `token_hash`).
 
 ---
 
-### 3. Test Coverage Summary
-
-- **Backend Pytest Suite**: 27 passing tests (`PYTHONPATH=backend .venv/bin/pytest backend/tests -v`).
-- **Frontend Vitest Suite**: 2 passing component test suites (`npm test` in `frontend/`).
-- **TypeScript & Production Build**: `npm run type-check && npm run build` passing with 0 errors.
-
----
-
-### 4. What's Next (Day 6 Roadmap)
-- **Hardening & Edge Cases**:
-  - Cross-tenant isolation auditing across all APIs.
-  - Rate limiting stress tests, database connection pool tuning, and exception boundary hardening.
-  - Production readiness inspection.
+### 2. Test Coverage Summary
+- **Backend Pytest Suite**: **30 passing tests** (`PYTHONPATH=backend .venv/bin/pytest backend/tests -v`).
+- **Frontend Vitest Suite**: **2 passing component test suites** (`npm test` in `frontend/`).
+- **Frontend Type-Check & Build**: `npm run type-check && npm run build` passing with 0 errors.
 
 ---
 
-### 5. Open Questions for User
-- Frontend build and design system are complete! Do you have any design feedback or visual adjustments before we move to Day 6 hardening?
+### 3. Open Questions / Findings for User
+- **Auth Rate Limiter In-Memory Fallback**: When Redis is not connected during local dev or unit tests, the rate limiter falls back to an in-memory sliding window store. We added an autouse fixture in `conftest.py` to reset the store between unit tests so rate limits don't overflow across test cases.
