@@ -1,4 +1,4 @@
-# DevOps Risk Platform — Progress & Architecture Log
+# DevOps Risk Platform (Riskline) — Progress & Architecture Log
 
 ## Day 1 — Foundation (Completed)
 
@@ -111,48 +111,43 @@
   - `ChatDrawer.tsx`: Slide-over AI Assistant drawer with real-time SSE token streaming, Audience Mode toggle pills (`Technical`, `Business`, `Auto-Detect`), and persistent history.
   - `NotesPage.tsx`: Brainstorm board grid with tag filters (`all`, `idea`, `blocker`, `decision`, `question`), optimistic note creation, and author/admin deletion permissions.
   - `TeamRosterPage.tsx`, `OrgSettingsPage.tsx`, `AuditLogsPage.tsx`: Role management, 48-hour invite token generator, sole-admin protection rules, and filterable audit event logs.
-- **Testing Suite**:
-  - Vitest component tests in `src/__tests__/` (Header and Navigation components passing).
-  - Playwright E2E integration test spec in `e2e/full_flow.spec.ts`.
 
 ---
 
 ## Day 6 — Integrations, Security Hardening & Performance (Completed)
 
 ### 1. What's Built & Verified
-
-#### Power BI Export Integration
-- **API Key Management (`export.py`, `api_key.py`)**: Admin-restricted endpoint `POST /api/v1/export/api-keys` issuing 32-character secret keys (`rk_live_...`), stored as SHA-256 hashes in database table `api_keys` with Alembic migration `005_powerbi_and_password_resets.py`.
-- **Power BI JSON Export Endpoint (`GET /api/v1/export/power-bi`)**: Read-only endpoint authenticated via `X-API-Key` header or `?api_key=...` query parameter. Returns tabular change history, risk scores, summaries, and milestone progress filtered strictly by the key owner's `org_id`.
-- **Documentation (`docs/power-bi-setup.md`)**: Step-by-step connection guide for Power BI Desktop Web Data Source with custom header authentication and scheduled refresh.
-
-#### Security Pass & Audit Checklist
-| Security Item | Status | Verification & Implementation Notes |
-| :--- | :---: | :--- |
-| **Tenant Isolation Audit** | PASSED | Re-audited all query paths (`Change`, `Note`, `TeamMember`, `ProjectProgress`, `ChatMessage`, `AuditLog`, `Notification`, `ApiKey`). Confirmed `WHERE org_id == current_user.org_id` on all endpoints. |
-| **XSS & Input Sanitization** | PASSED | Pydantic strict string validation on inputs; React JSX auto-escaping prevents script injection on all UI rendered text. |
-| **File Upload Hardening** | PASSED | Server-side 10MB limit enforcement, `%PDF` magic header byte inspection, and graceful exception handling for malformed/corrupted PDFs (`test_malformed_pdf_upload_rejection`). |
-| **CORS Configuration** | PASSED | Explicit `CORSMiddleware` configured via `settings.cors_origin_list` (`http://localhost:5173`, `http://127.0.0.1:5173`). Wildcard `*` disabled. |
-| **Secrets Hygiene** | PASSED | Secrets loaded exclusively via pydantic-settings `.env`; password hashes use Argon2id; API keys stored as SHA-256 hashes; secrets never logged or returned in responses. |
-| **Password Reset Flow** | PASSED | `POST /auth/forgot-password` and `POST /auth/reset-password` with 1-hour expiration and single-use invalidation (`PasswordResetToken`). |
-| **Auth Rate Limiting** | PASSED | `AuthRateLimiter` enforces 5 attempts/min on `/login`, `/signup`, and password reset endpoints. |
-| **Vulnerability Audit** | PASSED | `npm audit fix` executed. Resolved dependency vulnerabilities. |
-
-#### Performance & Load Benchmarks
-- **Load Test Script (`backend/scripts/benchmark_load.py`)**:
-  - `/health`: **800.4 req/s** (50 requests in 0.062s)
-  - `GET /api/v1/changes`: **291.2 req/s** (50 requests in 0.172s)
-  - `POST /api/v1/changes`: **81.0 req/s** (10 mutation requests in 0.124s including async AI pipeline execution and high-risk notification dispatch)
-- **Database Indexes**: Indexed foreign keys and search columns (`org_id`, `user_id`, `created_at`, `status`, `key_hash`, `token_hash`).
+- **Power BI Export Integration**: Admin API Key issuance (`POST /api/v1/export/api-keys`), read-only tabular JSON export feed (`GET /api/v1/export/power-bi`), and connection documentation (`docs/power-bi-setup.md`).
+- **Security Pass**: Re-audited tenant scoping (`org_id`), single-use 1-hour password reset flow (`PasswordResetToken`), auth rate limiting (`AuthRateLimiter` 5 req/min on `/login`), PDF magic byte inspection, strict CORS, and dependency vulnerability scans (`npm audit`).
+- **Performance Benchmarks**: Load test script (`backend/scripts/benchmark_load.py`) verified **800.4 req/s** on `/health` and **291.2 req/s** on `/api/v1/changes`.
 
 ---
 
-### 2. Test Coverage Summary
-- **Backend Pytest Suite**: **30 passing tests** (`PYTHONPATH=backend .venv/bin/pytest backend/tests -v`).
-- **Frontend Vitest Suite**: **2 passing component test suites** (`npm test` in `frontend/`).
-- **Frontend Type-Check & Build**: `npm run type-check && npm run build` passing with 0 errors.
+## Day 7 — Production Release & Final Verification (Completed)
+
+### 1. What's Built
+- **Multi-Stage Production Dockerfiles**: Built slim production Docker images (`backend/Dockerfile`, `frontend/Dockerfile`) and production compose specification (`docker-compose.prod.yml`).
+- **Automated Postgres Backup**: Created shell script `infra/scripts/backup_db.sh` for automated daily `pg_dump` backup generation with 14-day retention cleanup.
+- **Observability**: Structured JSON logging (`logging.py`) with `X-Request-ID` and `org_id` context binding; Sentry error tracking integration stubs; Admin usage metrics endpoint `GET /api/v1/audit/metrics`.
+- **Full Documentation Suite**: Updated `README.md`, created `ARCHITECTURE.md`, `docs/deployment.md`, `CONTRIBUTING.md`, `docs/onboarding-guide.md`, and `CHANGELOG.md`.
+- **Compliance Baseline**: Built Privacy Policy (`/privacy`) and Terms of Service (`/terms`) stub pages with clear legal review disclaimers.
+- **Release Tagging**: Tagged git release `v1.0.0`.
 
 ---
 
-### 3. Open Questions / Findings for User
-- **Auth Rate Limiter In-Memory Fallback**: When Redis is not connected during local dev or unit tests, the rate limiter falls back to an in-memory sliding window store. We added an autouse fixture in `conftest.py` to reset the store between unit tests so rate limits don't overflow across test cases.
+## 2. Test Coverage & CI Summary
+
+- **Backend Pytest Suite**: **30 passed** in 7.07s (`PYTHONPATH=backend .venv/bin/pytest backend/tests -v`).
+- **Frontend Vitest Suite**: **2 passed** (`npm test` in `frontend/`).
+- **TypeScript Type-Check & Production Build**: Passed with 0 errors (`npm run type-check && npm run build`).
+
+---
+
+## 3. Honest Production Readiness Assessment
+
+While **Riskline v1.0.0** is fully functional, tenant-isolated, tested, and ready to hand to a startup team, the following items should be addressed before enterprise scale:
+
+1. **Email / Slack Delivery Integrations**: Notification delivery currently outputs to structured log stubs (`[EMAIL NOTIFICATION STUB]`, `[SLACK WEBHOOK STUB]`). Production connection to SendGrid / AWS SES and real Slack App Webhook URLs requires adding API keys.
+2. **Postgres Connection Pooling at Scale**: Standard SQLAlchemy session pooling (`pool_size=5`, `max_overflow=10`) is configured. Under ultra-high concurrent backend workers (>1,000 req/s), PgBouncer should be placed in front of Postgres.
+3. **Redis Cluster for Event Broadcasting**: The SSE real-time event broadcaster currently uses an in-memory pub/sub engine. Scaling backend horizontally across multiple web server nodes will require Redis Pub/Sub backing.
+4. **Commercial Legal Review**: Privacy Policy and Terms of Service pages are present as structural baseline stubs, but require formal legal review by qualified counsel prior to commercial billing.

@@ -60,10 +60,17 @@ export const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }
         })}
       </div>
 
-      {/* Footer Branding */}
-      <div className="pt-4 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
-        <span>DevOps Risk v1.0</span>
-        <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded">STABLE</span>
+      {/* Footer Branding & Legal Links */}
+      <div className="pt-4 border-t border-slate-800 space-y-2">
+        <div className="flex items-center justify-between text-[11px] text-slate-500">
+          <span>DevOps Risk v1.0</span>
+          <span className="font-mono text-[10px] bg-slate-800 text-emerald-400 px-1.5 py-0.5 rounded">v1.0.0</span>
+        </div>
+        <div className="flex space-x-2 text-[10px] text-slate-500 font-mono">
+          <button onClick={() => onTabChange('privacy')} className="hover:text-slate-300">Privacy</button>
+          <span>•</span>
+          <button onClick={() => onTabChange('terms')} className="hover:text-slate-300">Terms</button>
+        </div>
       </div>
     </aside>
   );

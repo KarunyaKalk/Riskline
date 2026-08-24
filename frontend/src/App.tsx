@@ -12,6 +12,7 @@ import { NotesPage } from './pages/NotesPage';
 import { TeamRosterPage } from './pages/TeamRosterPage';
 import { OrgSettingsPage } from './pages/OrgSettingsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
+import { PrivacyPolicyPage, TermsOfServicePage } from './pages/LegalPages';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
@@ -20,7 +21,6 @@ const AppContent: React.FC = () => {
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  // Check if current URL is accept-invite
   if (window.location.pathname === '/accept-invite') {
     return <InviteAcceptPage />;
   }
@@ -83,6 +83,8 @@ const AppContent: React.FC = () => {
           {activeTab === 'roster' && <TeamRosterPage />}
           {activeTab === 'settings' && <OrgSettingsPage />}
           {activeTab === 'audit' && <AuditLogsPage />}
+          {activeTab === 'privacy' && <PrivacyPolicyPage onBack={() => setActiveTab('dashboard')} />}
+          {activeTab === 'terms' && <TermsOfServicePage onBack={() => setActiveTab('dashboard')} />}
         </main>
       </div>
 
