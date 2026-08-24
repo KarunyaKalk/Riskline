@@ -12,7 +12,6 @@ class SignupRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=100)
 
     @field_validator("password")
-
     @classmethod
     def validate_password_complexity(cls, v: str) -> str:
         if len(v) < 8:
@@ -23,8 +22,8 @@ class SignupRequest(BaseModel):
             raise ValueError("Password must contain at least one lowercase letter (a-z)")
         if not re.search(r"[0-9]", v):
             raise ValueError("Password must contain at least one number (0-9)")
-        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
-            raise ValueError("Password must contain at least one special character (!@#$%^&*)")
+        if not re.search(r"[-!@#$%^&*()_+={}\[\]:;\"'<>,.?/|\\]", v):
+            raise ValueError("Password must contain at least one special character")
         return v
 
 

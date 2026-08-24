@@ -6,7 +6,7 @@ export const validatePassword = (password: string): string | null => {
   if (!/[A-Z]/.test(password)) return 'Password must contain at least 1 uppercase letter (A-Z).';
   if (!/[a-z]/.test(password)) return 'Password must contain at least 1 lowercase letter (a-z).';
   if (!/[0-9]/.test(password)) return 'Password must contain at least 1 number (0-9).';
-  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return 'Password must contain at least 1 special character (!@#$%^&*).';
+  if (!/[-!@#$%^&*()_+={}\[\]:;\"'<>,.?/|\\]/.test(password)) return 'Password must contain at least 1 special character (e.g. -, _, !, @, #, $, %).';
   return null;
 };
 
@@ -193,7 +193,7 @@ export const SignupPage: React.FC<{ onSwitchToLogin: () => void }> = ({ onSwitch
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus-visible:ring-2 focus-visible:ring-cyan-500"
             />
             <p className="text-[10px] text-slate-500 mt-1 font-mono">
-              Restraints: Min 8 chars, 1 uppercase (A-Z), 1 number (0-9), 1 special (!@#$%^&*)
+              Restraints: Min 8 chars, 1 uppercase (A-Z), 1 number (0-9), 1 special char (-, _, !, @, #, $, %)
             </p>
           </div>
 
