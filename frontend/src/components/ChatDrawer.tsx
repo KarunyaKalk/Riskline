@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChatMessage } from '../types';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 
 interface ChatDrawerProps {
   isOpen: boolean;
@@ -40,7 +40,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose }) => {
     const userMessageText = prompt.trim();
     setPrompt('');
 
-    // Append user message immediately
     const tempUserMsg: ChatMessage = {
       id: Date.now().toString(),
       org_id: '',
@@ -63,9 +62,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose }) => {
     setIsStreaming(true);
 
     try {
-      const response = await fetch('/api/v1/chat/stream', {
+      const token = localStorage.getItem('access_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const response = await fetch(`${API_BASE}/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           session_id: 'main',
           message: userMessageText,
@@ -198,7 +201,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ isOpen, onClose }) => {
           <button
             type="submit"
             disabled={isStreaming || !prompt.trim()}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-medium text-xs rounded-lg transition-all"
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-xs rounded-lg transition-all"
           >
             {isStreaming ? 'Streaming...' : 'Send'}
           </button>

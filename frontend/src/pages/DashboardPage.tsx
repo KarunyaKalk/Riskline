@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Change, ProjectProgress } from '../types';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 
 interface Props {
   onSelectChange: (id: string) => void;
@@ -16,7 +16,7 @@ export const DashboardPage: React.FC<Props> = ({ onSelectChange }) => {
     loadDashboardData();
 
     // Subscribe to SSE stream for live activity
-    const es = new EventSource('/api/v1/events/stream');
+    const es = new EventSource(`${API_BASE}/events/stream`);
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);

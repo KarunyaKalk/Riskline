@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { NotificationPopover } from './NotificationPopover';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 
 interface HeaderProps {
   onToggleChat: () => void;
@@ -17,7 +17,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleChat, onNavigate }) => {
   useEffect(() => {
     fetchUnreadCount();
     // Subscribe to SSE stream for live events
-    const es = new EventSource('/api/v1/events/stream');
+    const es = new EventSource(`${API_BASE}/events/stream`);
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
